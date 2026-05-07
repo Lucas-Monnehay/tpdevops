@@ -1,0 +1,45 @@
+---
+- name: "Partie 5 : Installation de Node Exporter sur tout le parc"
+  hosts: all
+  become: yes
+  tasks:
+    - name: Installer Node Exporter
+      apt:
+        name: prometheus-node-exporter
+        state: present
+        update_cache: yes
+
+- name: "Partie 5 : Configuration du Serveur de Monitoring"
+  hosts: monitoring
+  become: yes
+  tasks:
+    - name: Installer les dépendances Grafana
+      apt:
+        name: [apt-transport-https, software-properties-common, wget, gnupg]
+        state: present
+
+    - name: Ajouter le dépôt et installer Grafana/Prometheus
+      shell: |
+        wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | sudo tee /usr/share/keyrings/grafana.gpg > /dev/null
+        echo "deb [signed-by=/usr/share/keyrings/grafana.gpg] https://apt.grafana.com stable main" | sudo tee /etc/apt/sources.list.d/grafana.list
+        apt update && apt install -y prometheus grafana
+      args:
+        creates: /etc/apt/sources.list.d/grafana.list
+
+    - name: Configurer Prometheus pour surveiller les deux VMs
+      copy:
+        dest: /etc/prometheus/prometheus.yml
+        content: |
+          global:
+            scrape_interval: 15s
+          scrape_configs:
+            - job_name: 'node_exporter'
+              static_configs:
+                - targets: ['192.168.1.61:9100', '192.168.1.51:9100']
+
+    - name: Activer et démarrer les services
+      service:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+      loop: [prometheus, grafana-server]
