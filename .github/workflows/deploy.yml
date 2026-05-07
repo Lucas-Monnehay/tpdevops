@@ -6,26 +6,27 @@ on:
 
 jobs:
   deploy-infrastructure:
-    runs-on: self-hosted # On appelle ton runner Vagrant (Étape 1 validée !)
-    
-    steps:
-      - name:  Récupération du code
-        uses: actions/checkout@v4
-        # Le runner télécharge les fichiers et fait le 'cd' tout seul ici.
+    runs-on: self-hosted # Utilise ton runner local
 
-      - name:  Builder l'image Docker
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v4
+
+      - name: Builder l'image Docker
         run: |
-          # On build la nouvelle version de l'image
+          # ÉTAPE CRUCIALE : On se déplace dans le dossier prt1 avant de build
+          cd prt1 
+          
+          # On build l'image en utilisant le contexte du dossier de l'API
           sudo docker build -t hamustra/api-lacets:latest .
           
-          # Optionnel mais recommandé si K3s ne trouve pas l'image locale :
-          # On l'injecte directement dans le cerveau de K3s
+          # On injecte l'image dans K3s (pas besoin de cd ici, l'image est déjà dans Docker)
           sudo docker save hamustra/api-lacets:latest | sudo k3s ctr images import -
 
-      - name:  Déployer sur l'infrastructure Kubernetes
+      - name: Déployer sur l'infrastructure Kubernetes
         run: |
-          # On applique les configurations (celles qu'on a réparées dans la Partie 3)
-          sudo k3s kubectl apply -f api-config.yaml
+          # On précise le chemin vers le fichier de config qui est maintenant dans prt1
+          sudo k3s kubectl apply -f prt1/api-config.yaml
           
-          # On force le pod à redémarrer pour qu'il utilise la nouvelle image fraîchement buildée
+          # On force le redémarrage pour appliquer la nouvelle image
           sudo k3s kubectl rollout restart deployment/api-server
